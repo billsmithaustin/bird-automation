@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <!-- Carolina Wren: plump body, cocked tail, long downcurved bill, white eyebrow -->
+  <rect x="8" y="8" width="240" height="240" rx="48" fill="#f4ead8"/>
+  <g fill="#a0522d" stroke="#3b2414" stroke-width="7" stroke-linejoin="round" stroke-linecap="round">
+    <path d="M240 132
+             Q226 110 200 106
+             C190 82 158 78 146 98
+             C134 110 112 116 94 130
+             L62 62
+             Q52 56 46 70
+             L78 154
+             C86 194 132 206 166 182
+             C186 168 194 140 202 120
+             Q226 118 240 132 Z"/>
+  </g>
+  <g fill="none" stroke-linecap="round">
+    <!-- eyebrow stripe -->
+    <path d="M146 104 Q172 84 202 106" stroke="#fffaf0" stroke-width="7"/>
+    <!-- wing -->
+    <path d="M104 142 C120 132 144 134 156 150 C144 168 120 172 104 142" stroke="#3b2414" stroke-width="6" stroke-linejoin="round"/>
+    <path d="M114 150 L146 152 M118 158 L142 160" stroke="#3b2414" stroke-width="4"/>
+    <!-- tail bars -->
+    <path d="M58 80 L68 76 M64 96 L74 92 M70 112 L80 108" stroke="#3b2414" stroke-width="4"/>
+    <!-- legs and perch -->
+    <path d="M130 196 L124 222 M150 192 L154 222" stroke="#3b2414" stroke-width="6"/>
+    <path d="M60 224 L210 224" stroke="#6b4423" stroke-width="10"/>
+  </g>
+  <circle cx="184" cy="112" r="6" fill="#1a0f08"/>
+  <!-- stop badge -->
+  <circle cx="200" cy="200" r="44" fill="#c62828" stroke="#f4ead8" stroke-width="8"/>
+  <rect x="182" y="182" width="36" height="36" rx="4" fill="#ffffff"/>
+</svg>
