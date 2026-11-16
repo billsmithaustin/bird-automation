@@ -8,6 +8,11 @@ MEDIAMTX_DIR=software/mediamtx_v1.12.0
 RTSP_PORT=8554
 YOUTUBE_URL=https://www.youtube.com/live_dashboard  # same page as Create -> Go Live
 YOUTUBE_WAIT=15  # seconds to let the live dashboard load before OBS starts
+# Dedicated Chrome profile, so remote debugging (needed to list tabs) is allowed.
+CHROME_PROFILE=~/.config/google-chrome-birdcam
+CHROME_PORT=9222
+OBS_WAIT=30  # seconds to wait for OBS to report the stream as live
+OBS_WS="$(dirname "$(readlink -f "$0")")/obs-ws.py"
 
 log() { echo "[$(date +%H:%M:%S)] $*"; }
 
@@ -44,28 +49,55 @@ timeout 1 bash -c "</dev/tcp/$RPI_HOST/$RTSP_PORT" 2>/dev/null \
   || { log "mediamtx never came up; check ~/$MEDIAMTX_DIR/mediamtx.log on the rpi"; exit 1; }
 sleep 3  # give the camera a moment to start publishing
 
-# 3. Open the YouTube live dashboard in a new Chrome window. Wayland won't let us
-# raise a minimized existing window, but a new one always appears.
-log "Opening YouTube live dashboard in Chrome..."
-setsid nohup google-chrome --new-window "$YOUTUBE_URL" >/dev/null 2>&1 &
+# 3. Open the YouTube live dashboard in the bird cam Chrome profile. Wayland won't let us
+# raise a minimized window, so close any dashboard tab already open and open it again
+# in a new window, which always appears.
+dashboard_tab_ids() {
+  curl -sf "http://127.0.0.1:$CHROME_PORT/json/list" | python3 -c '
+import json, sys
+for t in json.load(sys.stdin):
+    url = t.get("url", "")
+    if t.get("type") == "page" and ("live_dashboard" in url or
+                                    ("studio.youtube.com" in url and "/livestreaming" in url)):
+        print(t["id"])
+'
+}
+if ids=$(dashboard_tab_ids 2>/dev/null) && [[ -n $ids ]]; then
+  log "Live dashboard already open; reopening it in a new window..."
+  for id in $ids; do curl -sf "http://127.0.0.1:$CHROME_PORT/json/close/$id" >/dev/null || true; done
+else
+  log "Opening YouTube live dashboard in Chrome..."
+fi
+setsid nohup google-chrome --user-data-dir="$CHROME_PROFILE" --remote-debugging-port="$CHROME_PORT" \
+  --no-first-run --no-default-browser-check --new-window "$YOUTUBE_URL" >/dev/null 2>&1 &
 sleep "$YOUTUBE_WAIT"
 
-# 4+5. Launch OBS and start streaming.
-obs_streaming() {
-  ss -tnpH state established '( dport = :443 or dport = :1935 )' 2>/dev/null | grep -q '"obs"'
-}
-if obs_streaming; then
-  log "OBS is already streaming; leaving it alone."
+# 4+5. Launch OBS and start streaming, controlled through obs-websocket.
+obs_ws() { python3 "$OBS_WS" "$@"; }  # exit 0 = yes/ok, 1 = not streaming, 3 = can't reach OBS
+WS_HINT="enable it in OBS: Tools -> WebSocket Server Settings -> Enable WebSocket server"
+if pgrep -x obs >/dev/null; then
+  rc=0; obs_ws streaming || rc=$?
+  case $rc in
+    0) log "OBS is already streaming; leaving it alone." ;;
+    1) log "OBS is running but not streaming; starting the stream..."
+       obs_ws start-stream ;;
+    *) log "Can't reach OBS's WebSocket server; $WS_HINT"; exit 1 ;;
+  esac
 else
-  if pgrep -x obs >/dev/null; then
-    # Can't raise a minimized window on Wayland, so restart OBS to get a visible one.
-    log "OBS is running but not streaming; restarting it..."
-    pkill -TERM -x obs
-    for _ in $(seq 15); do pgrep -x obs >/dev/null || break; sleep 1; done
-    pgrep -x obs >/dev/null && { log "OBS didn't quit; close it and run this again."; exit 1; }
-  fi
   log "Launching OBS and starting the stream..."
   setsid nohup obs --startstreaming --disable-shutdown-check >/dev/null 2>&1 &
 fi
+
+log "Waiting for OBS to report the stream as live..."
+for _ in $(seq "$OBS_WAIT"); do
+  rc=0; obs_ws streaming 2>/dev/null || rc=$?
+  [[ $rc == 0 ]] && break
+  sleep 1
+done
+case $rc in
+  0) log "OBS is streaming." ;;
+  1) log "OBS didn't start streaming within ${OBS_WAIT}s; check OBS for an error."; exit 1 ;;
+  *) log "Can't reach OBS's WebSocket server; $WS_HINT"; exit 1 ;;
+esac
 
 log "Done."

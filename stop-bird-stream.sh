@@ -3,6 +3,7 @@
 set -euo pipefail
 
 RPI=bill@192.168.3.76
+OBS_WS="$(dirname "$(readlink -f "$0")")/obs-ws.py"
 
 log() { echo "[$(date +%H:%M:%S)] $*"; }
 
@@ -11,8 +12,17 @@ if [[ ${1:-} == --pause ]]; then
   trap 'echo; read -n1 -s -t 30 -p "Press any key to close (auto-closes in 30s)" || true' EXIT
 fi
 
-# 1. Quit OBS (ends the YouTube stream once it stops receiving video).
+# 1. Stop the stream through obs-websocket (YouTube auto-stop then ends the broadcast),
+# then quit OBS. Stopping first avoids OBS's "stream is active, really quit?" dialog.
+obs_ws() { python3 "$OBS_WS" "$@"; }  # exit 0 = yes/ok, 1 = not streaming, 3 = can't reach OBS
 if pgrep -x obs >/dev/null; then
+  log "Stopping the stream..."
+  if obs_ws stop-stream; then
+    for _ in $(seq 10); do obs_ws streaming 2>/dev/null || break; sleep 1; done
+    obs_ws streaming 2>/dev/null && log "OBS still reports streaming; quitting anyway." || log "Stream stopped."
+  else
+    log "Couldn't stop it through OBS's WebSocket server; quitting OBS anyway."
+  fi
   log "Quitting OBS..."
   pkill -TERM -x obs
   for _ in $(seq 15); do pgrep -x obs >/dev/null || break; sleep 1; done
